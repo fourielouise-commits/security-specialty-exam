@@ -1,10 +1,8 @@
-
-<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SCS-C03 Practice Exam</title>
+<title>AWS Security Specialty (SCS-C03)</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;background:#f5f5f5;padding:12px;max-width:700px;margin:0 auto}
@@ -14,6 +12,9 @@ h1{font-size:17px;margin-bottom:2px}
 .bar b{color:#2563eb}
 .prog{height:4px;background:#e5e5e5;border-radius:2px;flex-basis:100%}
 .prog div{height:4px;background:#2563eb;border-radius:2px;transition:width .3s}
+.timer{font-size:12px;font-weight:600;color:#dc2626;min-width:60px;text-align:right}
+.timer.warn{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 .card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:16px;margin-bottom:12px}
 .dom{font-size:10px;font-weight:600;color:#7c3aed;text-transform:uppercase;margin-bottom:4px}
 .qtext{font-size:14px;line-height:1.5;margin-bottom:12px}
@@ -29,28 +30,118 @@ h1{font-size:17px;margin-bottom:2px}
 .btn.pri{background:#2563eb;color:#fff}
 .btn.sec{background:#e5e5e5;color:#333}
 .btn:disabled{opacity:.4;cursor:default}
-.score{text-align:center;padding:30px 20px}
+.flag-btn{padding:6px 12px;border:1px solid #f59e0b;border-radius:6px;font-size:11px;cursor:pointer;background:#fffbeb;color:#92400e;margin-left:auto}
+.flag-btn.flagged{background:#f59e0b;color:#fff}
+.score{text-align:center;padding:20px}
 .score h2{font-size:22px;margin-bottom:8px}
 .score .pct{font-size:48px;font-weight:700;color:#2563eb}
 .score .detail{font-size:13px;color:#555;margin-top:8px}
+.domain-breakdown{text-align:left;margin:16px auto;max-width:400px}
+.domain-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;font-size:12px}
+.domain-row .pass{color:#16a34a;font-weight:600}
+.domain-row .fail{color:#dc2626;font-weight:600}
+.mode-select{margin-bottom:12px;padding:12px;background:#fff;border:1px solid #ddd;border-radius:8px}
+.mode-select label{font-size:12px;margin-right:12px;cursor:pointer}
+.mode-select select{font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid #ddd}
 .loading{text-align:center;padding:40px;color:#666}
 </style>
 </head>
 <body>
-<h1>AWS Security Specialty (SCS-C03)</h1>
-<p class="sub">Practice Exam | 6 Domains | Pass: 75%</p>
-<div class="bar"><span>Q <b id="qn">1</b>/<span id="tot">0</span></span><span id="sc"></span><div class="prog"><div id="pb" style="width:0%"></div></div></div>
+<h1 id="title">AWS Security Specialty (SCS-C03)</h1>
+<p class="sub" id="subtitle">Loading...</p>
+<div class="mode-select" id="modes">
+<label><input type="checkbox" id="timerMode" checked> Timer</label>
+<label><input type="checkbox" id="spMode"> Priority Mode (wrong Qs first)</label>
+<select id="domainFilter"><option value="all">All Domains</option></select>
+</div>
+<div class="bar"><span>Q <b id="qn">1</b>/<span id="tot">0</span></span><span class="timer" id="timer">--:--</span><span id="sc"></span><div class="prog"><div id="pb" style="width:0%"></div></div></div>
 <div id="area"><div class="loading">Loading questions...</div></div>
-<div class="nav"><button class="btn sec" id="prev" onclick="go(-1)">Back</button><button class="btn pri" id="next" onclick="go(1)">Next</button></div>
+<div class="nav"><button class="btn sec" id="prev" onclick="go(-1)">Back</button><button class="btn flag-btn" id="flagBtn" onclick="toggleFlag()">Flag</button><button class="btn pri" id="next" onclick="go(1)">Next</button></div>
 <script>
-let Q=[],cur=0,ans=[],revealed=[];
-fetch('questions.json').then(r=>r.json()).then(data=>{
-Q=data;ans=Array(Q.length).fill(null);revealed=Array(Q.length).fill(false);
-document.getElementById('tot').textContent=Q.length;render();
-}).catch(()=>{document.getElementById('area').innerHTML='<div class="loading">Error loading questions.json</div>';});
+const CONFIG={title:"AWS Practice Exam",sub:"Practice Exam",pass:75,minsPerQ:1.5};
+let Q=[],filtered=[],cur=0,ans=[],revealed=[],flags=[];
+let timerInterval,timeLeft=0,started=false;
+const store=window.localStorage;
+const examKey=location.pathname.replace(/\//g,'_');
+
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+
+function shuffleOptions(q){
+let opts=q.o.map((o,i)=>({text:o,idx:i}));
+shuffle(opts);
+let newOpts=opts.map(o=>o.text);
+let newAns;
+if(Array.isArray(q.a)){
+newAns=q.a.map(ai=>opts.findIndex(o=>o.idx===ai));
+}else{
+newAns=opts.findIndex(o=>o.idx===q.a);
+}
+return{...q,o:newOpts,a:newAns};
+}
+
+function getWrongQs(){
+let data=store.getItem(examKey+'_wrong');
+return data?JSON.parse(data):[];
+}
+function saveWrongQs(wrongs){
+store.setItem(examKey+'_wrong',JSON.stringify(wrongs));
+}
+
+function startExam(){
+let useTimer=document.getElementById('timerMode').checked;
+let useSP=document.getElementById('spMode').checked;
+let domainVal=document.getElementById('domainFilter').value;
+
+filtered=domainVal==='all'?[...Q]:Q.filter(q=>q.d===domainVal);
+filtered=filtered.map(q=>shuffleOptions(q));
+
+if(useSP){
+let wrongs=getWrongQs();
+let wrongSet=new Set(wrongs);
+let wrongQs=filtered.filter(q=>wrongSet.has(q.q));
+let otherQs=filtered.filter(q=>!wrongSet.has(q.q));
+shuffle(wrongQs);shuffle(otherQs);
+filtered=[...wrongQs,...otherQs];
+}else{
+shuffle(filtered);
+}
+
+cur=0;
+ans=Array(filtered.length).fill(null);
+revealed=Array(filtered.length).fill(false);
+flags=Array(filtered.length).fill(false);
+document.getElementById('tot').textContent=filtered.length;
+document.getElementById('modes').style.display='none';
+
+if(useTimer){
+timeLeft=Math.round(filtered.length*CONFIG.minsPerQ*60);
+startTimer();
+}else{
+document.getElementById('timer').textContent='No timer';
+}
+started=true;
+render();
+}
+
+function startTimer(){
+updateTimerDisplay();
+timerInterval=setInterval(()=>{
+timeLeft--;
+if(timeLeft<=0){clearInterval(timerInterval);timeUp();}
+updateTimerDisplay();
+},1000);
+}
+function updateTimerDisplay(){
+let m=Math.floor(timeLeft/60),s=timeLeft%60;
+let el=document.getElementById('timer');
+el.textContent=m+':'+(s<10?'0':'')+s;
+el.classList.toggle('warn',timeLeft<300);
+}
+function timeUp(){showScore();}
+
 function render(){
-if(!Q.length)return;
-let q=Q[cur];
+if(!filtered.length)return;
+let q=filtered[cur];
 let h='<div class="card"><div class="dom">'+q.d+'</div><div class="qtext">Q'+(cur+1)+'. '+q.q+'</div>';
 let multi=Array.isArray(q.a);
 q.o.forEach((o,i)=>{
@@ -67,15 +158,19 @@ h+='<div class="'+cls+'" onclick="pick('+i+')">'+String.fromCharCode(65+i)+'. '+
 h+='<div class="exp'+(revealed[cur]?' show':'')+'">'+q.e+'</div></div>';
 document.getElementById('area').innerHTML=h;
 document.getElementById('qn').textContent=cur+1;
-document.getElementById('pb').style.width=((cur+1)/Q.length*100)+'%';
+document.getElementById('pb').style.width=((cur+1)/filtered.length*100)+'%';
 document.getElementById('prev').disabled=cur===0;
-document.getElementById('next').textContent=cur===Q.length-1?'Finish':'Next';
-let correct=0;Q.forEach((qq,i)=>{if(revealed[i]){let a=qq.a;if(Array.isArray(a)){if(ans[i]&&JSON.stringify([...ans[i]].sort())===JSON.stringify([...a].sort()))correct++;}else{if(ans[i]===a)correct++;}}});
-document.getElementById('sc').textContent=correct+'/'+Q.filter((_,i)=>revealed[i]).length;
+document.getElementById('next').textContent=cur===filtered.length-1?'Finish':'Next';
+let correct=0;filtered.forEach((qq,i)=>{if(revealed[i]){let a=qq.a;if(Array.isArray(a)){if(ans[i]&&JSON.stringify([...ans[i]].sort())===JSON.stringify([...a].sort()))correct++;}else{if(ans[i]===a)correct++;}}});
+document.getElementById('sc').textContent=correct+'/'+filtered.filter((_,i)=>revealed[i]).length;
+let fb=document.getElementById('flagBtn');
+fb.textContent=flags[cur]?'Flagged':'Flag';
+fb.classList.toggle('flagged',flags[cur]);
 }
+
 function pick(i){
 if(revealed[cur])return;
-let q=Q[cur];
+let q=filtered[cur];
 if(Array.isArray(q.a)){
 if(!ans[cur])ans[cur]=[];
 let idx=ans[cur].indexOf(i);
@@ -83,17 +178,66 @@ if(idx>-1)ans[cur].splice(idx,1);else ans[cur].push(i);
 }else{ans[cur]=i;}
 render();
 }
+
+function toggleFlag(){flags[cur]=!flags[cur];render();}
+
 function go(dir){
+if(!started){startExam();return;}
 if(dir===1&&!revealed[cur]){revealed[cur]=true;render();return;}
-if(dir===1&&cur===Q.length-1){showScore();return;}
-cur+=dir;if(cur<0)cur=0;if(cur>=Q.length)cur=Q.length-1;render();
+if(dir===1&&cur===filtered.length-1){showScore();return;}
+cur+=dir;if(cur<0)cur=0;if(cur>=filtered.length)cur=filtered.length-1;render();
 }
+
 function showScore(){
-let c=0;Q.forEach((q,i)=>{let a=q.a;if(Array.isArray(a)){if(ans[i]&&JSON.stringify([...ans[i]].sort())===JSON.stringify([...a].sort()))c++;}else{if(ans[i]===a)c++;}});
-let pct=Math.round(c/Q.length*100);
-document.getElementById('area').innerHTML='<div class="score"><h2>'+(pct>=75?'PASS':'NEEDS WORK')+'</h2><div class="pct">'+pct+'%</div><div class="detail">'+c+'/'+Q.length+' correct | Pass: 75%</div><div style="margin-top:16px"><button class="btn pri" onclick="Q.sort(()=>Math.random()-0.5);cur=0;ans=Array(Q.length).fill(null);revealed=Array(Q.length).fill(false);render();">Retry</button></div></div>';
+if(timerInterval)clearInterval(timerInterval);
+let c=0,domainScores={};
+filtered.forEach((q,i)=>{
+if(!domainScores[q.d])domainScores[q.d]={correct:0,total:0};
+domainScores[q.d].total++;
+let a=q.a,correct=false;
+if(Array.isArray(a)){if(ans[i]&&JSON.stringify([...ans[i]].sort())===JSON.stringify([...a].sort()))correct=true;}
+else{if(ans[i]===a)correct=true;}
+if(correct){c++;domainScores[q.d].correct++;}
+else{
+let wrongs=getWrongQs();
+if(!wrongs.includes(q.q)){wrongs.push(q.q);saveWrongQs(wrongs);}
 }
+});
+let pct=Math.round(c/filtered.length*100);
+let pass=pct>=CONFIG.pass;
+let dh='<div class="domain-breakdown"><h3 style="font-size:14px;margin-bottom:8px">Score by Domain</h3>';
+Object.keys(domainScores).sort().forEach(d=>{
+let ds=domainScores[d];
+let dp=Math.round(ds.correct/ds.total*100);
+let cls=dp>=CONFIG.pass?'pass':'fail';
+dh+='<div class="domain-row"><span>'+d+'</span><span class="'+cls+'">'+ds.correct+'/'+ds.total+' ('+dp+'%)</span></div>';
+});
+dh+='</div>';
+let flagged=flags.filter(f=>f).length;
+let flagInfo=flagged?'<div style="margin-top:10px;font-size:12px;color:#92400e">Flagged for review: '+flagged+' questions</div>':'';
+document.getElementById('area').innerHTML='<div class="score"><h2>'+(pass?'PASS':'NEEDS WORK')+'</h2><div class="pct">'+pct+'%</div><div class="detail">'+c+'/'+filtered.length+' correct | Pass: '+CONFIG.pass+'%</div>'+flagInfo+dh+'<div style="margin-top:16px"><button class="btn pri" onclick="resetExam()">Retry</button> <button class="btn sec" onclick="reviewFlagged()" style="margin-left:8px">Review Flagged</button></div></div>';
+document.getElementById('modes').style.display='block';
+}
+
+function resetExam(){started=false;startExam();}
+
+function reviewFlagged(){
+let flaggedQs=filtered.filter((_,i)=>flags[i]);
+if(!flaggedQs.length){alert('No flagged questions');return;}
+filtered=flaggedQs.map(q=>shuffleOptions(q));
+cur=0;ans=Array(filtered.length).fill(null);revealed=Array(filtered.length).fill(false);flags=Array(filtered.length).fill(false);
+document.getElementById('tot').textContent=filtered.length;
+document.getElementById('modes').style.display='none';
+render();
+}
+
+fetch('questions.json').then(r=>r.json()).then(data=>{
+Q=data;
+let domains=[...new Set(Q.map(q=>q.d))].sort();
+let sel=document.getElementById('domainFilter');
+domains.forEach(d=>{let o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});
+document.getElementById('subtitle').textContent=Q.length+' Questions | Pass: '+CONFIG.pass+'%';
+document.getElementById('area').innerHTML='<div style="text-align:center;padding:30px"><button class="btn pri" onclick="go(1)">Start Exam</button></div>';
+}).catch(()=>{document.getElementById('area').innerHTML='<div class="loading">Error loading questions.json</div>';});
 </script>
 </body>
-</html>
-
