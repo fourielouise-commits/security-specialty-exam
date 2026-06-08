@@ -1,0 +1,99 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SCS-C03 Practice Exam</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f5f5;padding:12px;max-width:700px;margin:0 auto}
+h1{font-size:17px;margin-bottom:2px}
+.sub{font-size:11px;color:#666;margin-bottom:12px}
+.bar{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;flex-wrap:wrap;gap:6px}
+.bar b{color:#2563eb}
+.prog{height:4px;background:#e5e5e5;border-radius:2px;flex-basis:100%}
+.prog div{height:4px;background:#2563eb;border-radius:2px;transition:width .3s}
+.card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:16px;margin-bottom:12px}
+.dom{font-size:10px;font-weight:600;color:#7c3aed;text-transform:uppercase;margin-bottom:4px}
+.qtext{font-size:14px;line-height:1.5;margin-bottom:12px}
+.opt{display:block;padding:10px 12px;margin-bottom:6px;border:1px solid #e5e5e5;border-radius:6px;font-size:13px;cursor:pointer;transition:all .15s}
+.opt:hover{background:#f0f7ff;border-color:#93c5fd}
+.opt.sel{background:#dbeafe;border-color:#2563eb}
+.opt.correct{background:#dcfce7;border-color:#22c55e}
+.opt.wrong{background:#fee2e2;border-color:#ef4444}
+.exp{margin-top:10px;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:12px;color:#166534;display:none}
+.exp.show{display:block}
+.nav{display:flex;gap:8px;justify-content:space-between}
+.btn{padding:10px 20px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+.btn.pri{background:#2563eb;color:#fff}
+.btn.sec{background:#e5e5e5;color:#333}
+.btn:disabled{opacity:.4;cursor:default}
+.score{text-align:center;padding:30px 20px}
+.score h2{font-size:22px;margin-bottom:8px}
+.score .pct{font-size:48px;font-weight:700;color:#2563eb}
+.score .detail{font-size:13px;color:#555;margin-top:8px}
+.loading{text-align:center;padding:40px;color:#666}
+</style>
+</head>
+<body>
+<h1>AWS Security Specialty (SCS-C03)</h1>
+<p class="sub">Practice Exam | 6 Domains | Pass: 75%</p>
+<div class="bar"><span>Q <b id="qn">1</b>/<span id="tot">0</span></span><span id="sc"></span><div class="prog"><div id="pb" style="width:0%"></div></div></div>
+<div id="area"><div class="loading">Loading questions...</div></div>
+<div class="nav"><button class="btn sec" id="prev" onclick="go(-1)">Back</button><button class="btn pri" id="next" onclick="go(1)">Next</button></div>
+<script>
+let Q=[],cur=0,ans=[],revealed=[];
+fetch('questions.json').then(r=>r.json()).then(data=>{
+Q=data;ans=Array(Q.length).fill(null);revealed=Array(Q.length).fill(false);
+document.getElementById('tot').textContent=Q.length;render();
+}).catch(()=>{document.getElementById('area').innerHTML='<div class="loading">Error loading questions.json</div>';});
+function render(){
+if(!Q.length)return;
+let q=Q[cur];
+let h='<div class="card"><div class="dom">'+q.d+'</div><div class="qtext">Q'+(cur+1)+'. '+q.q+'</div>';
+let multi=Array.isArray(q.a);
+q.o.forEach((o,i)=>{
+let cls='opt';
+if(revealed[cur]){
+if(multi){if(q.a.includes(i))cls+=' correct';else if(ans[cur]&&ans[cur].includes(i))cls+=' wrong';}
+else{if(i===q.a)cls+=' correct';else if(ans[cur]===i)cls+=' wrong';}
+}else{
+if(multi&&ans[cur]&&ans[cur].includes(i))cls+=' sel';
+else if(!multi&&ans[cur]===i)cls+=' sel';
+}
+h+='<div class="'+cls+'" onclick="pick('+i+')">'+String.fromCharCode(65+i)+'. '+o+'</div>';
+});
+h+='<div class="exp'+(revealed[cur]?' show':'')+'">'+q.e+'</div></div>';
+document.getElementById('area').innerHTML=h;
+document.getElementById('qn').textContent=cur+1;
+document.getElementById('pb').style.width=((cur+1)/Q.length*100)+'%';
+document.getElementById('prev').disabled=cur===0;
+document.getElementById('next').textContent=cur===Q.length-1?'Finish':'Next';
+let correct=0;Q.forEach((qq,i)=>{if(revealed[i]){let a=qq.a;if(Array.isArray(a)){if(ans[i]&&JSON.stringify([...ans[i]].sort())===JSON.stringify([...a].sort()))correct++;}else{if(ans[i]===a)correct++;}}});
+document.getElementById('sc').textContent=correct+'/'+Q.filter((_,i)=>revealed[i]).length;
+}
+function pick(i){
+if(revealed[cur])return;
+let q=Q[cur];
+if(Array.isArray(q.a)){
+if(!ans[cur])ans[cur]=[];
+let idx=ans[cur].indexOf(i);
+if(idx>-1)ans[cur].splice(idx,1);else ans[cur].push(i);
+}else{ans[cur]=i;}
+render();
+}
+function go(dir){
+if(dir===1&&!revealed[cur]){revealed[cur]=true;render();return;}
+if(dir===1&&cur===Q.length-1){showScore();return;}
+cur+=dir;if(cur<0)cur=0;if(cur>=Q.length)cur=Q.length-1;render();
+}
+function showScore(){
+let c=0;Q.forEach((q,i)=>{let a=q.a;if(Array.isArray(a)){if(ans[i]&&JSON.stringify([...ans[i]].sort())===JSON.stringify([...a].sort()))c++;}else{if(ans[i]===a)c++;}});
+let pct=Math.round(c/Q.length*100);
+document.getElementById('area').innerHTML='<div class="score"><h2>'+(pct>=75?'PASS':'NEEDS WORK')+'</h2><div class="pct">'+pct+'%</div><div class="detail">'+c+'/'+Q.length+' correct | Pass: 75%</div><div style="margin-top:16px"><button class="btn pri" onclick="cur=0;ans=Array(Q.length).fill(null);revealed=Array(Q.length).fill(false);render();">Retry</button></div></div>';
+}
+</script>
+</body>
+</html>
+
