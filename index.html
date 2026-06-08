@@ -91,7 +91,7 @@ cur+=dir;if(cur<0)cur=0;if(cur>=Q.length)cur=Q.length-1;render();
 function showScore(){
 let c=0;Q.forEach((q,i)=>{let a=q.a;if(Array.isArray(a)){if(ans[i]&&JSON.stringify([...ans[i]].sort())===JSON.stringify([...a].sort()))c++;}else{if(ans[i]===a)c++;}});
 let pct=Math.round(c/Q.length*100);
-document.getElementById('area').innerHTML='<div class="score"><h2>'+(pct>=75?'PASS':'NEEDS WORK')+'</h2><div class="pct">'+pct+'%</div><div class="detail">'+c+'/'+Q.length+' correct | Pass: 75%</div><div style="margin-top:16px"><button class="btn pri" onclick="cur=0;ans=Array(Q.length).fill(null);revealed=Array(Q.length).fill(false);render();">Retry</button></div></div>';
+document.getElementById('area').innerHTML='<div class="score"><h2>'+(pct>=75?'PASS':'NEEDS WORK')+'</h2><div class="pct">'+pct+'%</div><div class="detail">'+c+'/'+Q.length+' correct | Pass: 75%</div><div style="margin-top:16px"><button class="btn pri" onclick="Q.sort(()=>Math.random()-0.5);cur=0;ans=Array(Q.length).fill(null);revealed=Array(Q.length).fill(false);render();">Retry</button></div></div>';
 }
 </script>
 </body>
